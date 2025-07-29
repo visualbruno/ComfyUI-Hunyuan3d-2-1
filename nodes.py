@@ -405,7 +405,7 @@ class Hy3DMultiViewsGenerator:
                 "image": ("IMAGE", {"tooltip": "Image to generate mesh from"}),
                 "steps": ("INT", {"default": 10, "min": 1, "max": 100, "step": 1, "tooltip": "Number of steps"}),
                 "guidance_scale": ("FLOAT", {"default": 3.0, "min": 1, "max": 10, "step": 0.1, "tooltip": "Guidance scale"}),
-                "texture_size": ("INT", {"default":1024,"min":512,"max":4096,"step":512}),
+                "texture_size": ("INT", {"default":1024,"min":512,"max":8192,"step":512}),
                 "unwrap_mesh": ("BOOLEAN", {"default":True}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
             },
@@ -1369,7 +1369,7 @@ class Hy3D21GenerateMultiViewsBatch:
                 "view_size": ("INT", {"default": 512, "min": 512, "max":1024, "step":256}),
                 "steps": ("INT", {"default": 10, "min": 1, "max": 100, "step": 1, "tooltip": "Number of steps"}),
                 "guidance_scale": ("FLOAT", {"default": 3.0, "min": 1, "max": 10, "step": 0.1, "tooltip": "Guidance scale"}),
-                "texture_size": ("INT", {"default":1024,"min":512,"max":4096,"step":512}),
+                "texture_size": ("INT", {"default":1024,"min":512,"max":8192,"step":512}),
                 "unwrap_mesh": ("BOOLEAN", {"default":True}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0x7fffffff}),
                 "generate_random_seed": ("BOOLEAN",{"default":True}),
@@ -1590,8 +1590,8 @@ class Hy3D21UseMultiViews:
                 "camera_config": ("HY3D21CAMERA",),
                 "albedo": ("IMAGE",),
                 "mr": ("IMAGE",),
-                "view_size": ("INT",{"default":512}),
-                "texture_size": ("INT",{"default":1024}),                
+                "view_size": ("INT",{"default":512,"min":512,"max":1024,"step":256}),
+                "texture_size": ("INT",{"default":1024,"min":512,"max":8192,"step":512}),
             },
         }
 
@@ -1617,8 +1617,8 @@ class Hy3D21UseMultiViewsFromMetaData:
             "required": {
                 "trimesh": ("TRIMESH",),
                 "metadata_file": ("STRING",),
-                "view_size": ("INT",{"default":512}),
-                "texture_size": ("INT",{"default":1024}),                
+                "view_size": ("INT",{"default":512,"min":512,"max":1024,"step":256}),
+                "texture_size": ("INT",{"default":1024,"min":512,"max":8192,"step":512}),
             },
         }
 
@@ -1686,7 +1686,7 @@ class Hy3D21MultiViewsGeneratorWithMetaData:
                 "image": ("IMAGE", {"tooltip": "Image to generate mesh from"}),
                 "steps": ("INT", {"default": 10, "min": 1, "max": 100, "step": 1, "tooltip": "Number of steps"}),
                 "guidance_scale": ("FLOAT", {"default": 3.0, "min": 1, "max": 10, "step": 0.1, "tooltip": "Guidance scale"}),
-                "texture_size": ("INT", {"default":1024,"min":512,"max":4096,"step":512}),
+                "texture_size": ("INT", {"default":1024,"min":512,"max":8192,"step":512}),
                 "unwrap_mesh": ("BOOLEAN", {"default":True}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
                 "output_name":("STRING",),
@@ -1827,8 +1827,8 @@ class Hy3DHighPolyToLowPolyBakeMultiViewsWithMetaData:
         return {
             "required": {
                 "metadata_file": ("STRING",),
-                "view_size": ("INT",{"default":512}),
-                "texture_size": ("INT",{"default":1024}),
+                "view_size": ("INT",{"default":512,"min":512,"max":1024,"step":256}),
+                "texture_size": ("INT",{"default":1024,"min":512,"max":8192,"step":512}),
                 "target_face_nums": ("STRING",{"default":"20000,10000,5000"}),                
             },
         }
