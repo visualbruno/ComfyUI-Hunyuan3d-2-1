@@ -1,0 +1,230 @@
+{
+  "id": "5ad9bf67-cabe-4ef4-8e0c-bbeee0fc546f",
+  "revision": 0,
+  "last_node_id": 8,
+  "last_link_id": 3,
+  "nodes": [
+    {
+      "id": 6,
+      "type": "Hy3D21CameraConfig",
+      "pos": [
+        -706.4094848632812,
+        305.74383544921875
+      ],
+      "size": [
+        382.7560729980469,
+        133.63636779785156
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "camera_config",
+          "type": "HY3D21CAMERA",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "visualbruno/ComfyUI-Hunyuan3d-2-1",
+        "ver": "e439689e4b67fb2af5f487ee26ef3a710be92658",
+        "Node name for S&R": "Hy3D21CameraConfig",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "0, 90, 180, 270, 0, 180, 45, 315",
+        "0, 0, 0, 0, 90, -90, 0, 0",
+        "1, 0.5, 1, 0.5, 1, 1, 0.1, 0.1",
+        1.1000000000000003
+      ]
+    },
+    {
+      "id": 4,
+      "type": "Hy3D21MeshGenerationBatch",
+      "pos": [
+        -732.0762939453125,
+        516.9437255859375
+      ],
+      "size": [
+        427.05511474609375,
+        622
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "input_folder",
+          "type": "STRING",
+          "links": [
+            2
+          ]
+        },
+        {
+          "name": "output_folder",
+          "type": "STRING",
+          "links": [
+            3
+          ]
+        },
+        {
+          "name": "processed_input_images",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "processed_output_meshes",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "aux_id": "visualbruno/ComfyUI-Hunyuan3d-2-1",
+        "ver": "a1133c7ff88dd2b8c6a85344ffe7acbaa58ec8d4",
+        "Node name for S&R": "Hy3D21MeshGenerationBatch",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "C:\\Travaux\\Test",
+        "C:\\Travaux\\Test\\3D",
+        "Hunyuan3D-vae-v2-1-fp16.ckpt",
+        "hunyuan3d-dit-v2-1-fp16.ckpt",
+        50,
+        7.5,
+        "sdpa",
+        1.01,
+        384,
+        128000,
+        0,
+        "dmc",
+        true,
+        200000,
+        1388,
+        "randomize",
+        true,
+        "obj",
+        false,
+        true,
+        true,
+        false
+      ]
+    },
+    {
+      "id": 5,
+      "type": "Hy3D21GenerateMultiViewsBatch",
+      "pos": [
+        -167.3360137939453,
+        428.5770568847656
+      ],
+      "size": [
+        592.5423583984375,
+        464.7333679199219
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "camera_config",
+          "type": "HY3D21CAMERA",
+          "link": 1
+        },
+        {
+          "name": "input_images_folder",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "input_images_folder"
+          },
+          "link": 2
+        },
+        {
+          "name": "input_meshes_folder",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "input_meshes_folder"
+          },
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "processed_meshes",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "aux_id": "visualbruno/ComfyUI-Hunyuan3d-2-1",
+        "ver": "f966762862e112b35dfe2e846bfb153f0dd6cae4",
+        "Node name for S&R": "Hy3D21GenerateMultiViewsBatch",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "C:\\Travaux\\Test\\Meshes",
+        512,
+        10,
+        3,
+        2048,
+        true,
+        411413629,
+        "randomize",
+        true,
+        false,
+        true,
+        "CustomModel",
+        "003_realSR_BSRGAN_DFO_s64w8_SwinIR-M_x4_GAN.pth",
+        "",
+        "",
+        "",
+        ""
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      6,
+      0,
+      5,
+      0,
+      "HY3D21CAMERA"
+    ],
+    [
+      2,
+      4,
+      0,
+      5,
+      1,
+      "STRING"
+    ],
+    [
+      3,
+      4,
+      1,
+      5,
+      2,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ue_links": [],
+    "ds": {
+      "scale": 0.826446280991736,
+      "offset": [
+        1020.0376340132016,
+        -189.85887715515295
+      ]
+    },
+    "links_added_by_ue": [],
+    "frontendVersion": "1.23.4"
+  },
+  "version": 0.4
+}

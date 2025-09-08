@@ -1,0 +1,463 @@
+{
+  "id": "58064675-d4cc-469b-9b2e-5cb63303171d",
+  "revision": 0,
+  "last_node_id": 14,
+  "last_link_id": 35,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Hy3D21LoadMesh",
+      "pos": [
+        -1050.1871337890625,
+        468.20074462890625
+      ],
+      "size": [
+        274.2369079589844,
+        58
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "trimesh",
+          "type": "TRIMESH",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "visualbruno/ComfyUI-Hunyuan3d-2-1",
+        "ver": "b25dbd8bc1adb6e1e699c3a2740d3a2358ee4752",
+        "Node name for S&R": "Hy3D21LoadMesh",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "C:\\Git\\ComfyUI\\output\\CyberWarrior_Hy3D_00001_.obj"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "Hy3D21MeshUVWrap",
+      "pos": [
+        -748.493896484375,
+        549.8353881835938
+      ],
+      "size": [
+        239.62557983398438,
+        26
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "trimesh",
+          "type": "TRIMESH",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "trimesh",
+          "type": "TRIMESH",
+          "links": [
+            14
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "visualbruno/ComfyUI-Hunyuan3d-2-1",
+        "ver": "b25dbd8bc1adb6e1e699c3a2740d3a2358ee4752",
+        "Node name for S&R": "Hy3D21MeshUVWrap",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 3,
+      "type": "Hy3D21CameraConfig",
+      "pos": [
+        -1037.6708984375,
+        706.2720336914062
+      ],
+      "size": [
+        382.7560729980469,
+        133.63636779785156
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "camera_config",
+          "type": "HY3D21CAMERA",
+          "links": [
+            15
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "visualbruno/ComfyUI-Hunyuan3d-2-1",
+        "ver": "e439689e4b67fb2af5f487ee26ef3a710be92658",
+        "Node name for S&R": "Hy3D21CameraConfig",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "0, 90, 180, 270, 0, 180, 45, 315",
+        "0, 0, 0, 0, 90, -90, 0, 0",
+        "1, 0.5, 1, 0.5, 1, 1, 0.1, 0.1",
+        1.1000000000000003
+      ]
+    },
+    {
+      "id": 4,
+      "type": "Hy3D21LoadImageWithTransparency",
+      "pos": [
+        -1043.8427734375,
+        921.7801513671875
+      ],
+      "size": [
+        485.4837951660156,
+        439.4151916503906
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "mask",
+          "type": "MASK",
+          "links": null
+        },
+        {
+          "name": "image_with_alpha",
+          "type": "IMAGE",
+          "links": [
+            16
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "visualbruno/ComfyUI-Hunyuan3d-2-1",
+        "ver": "19e77b34abcadf80a782bc34ec447b8b366773d1",
+        "Node name for S&R": "Hy3D21LoadImageWithTransparency",
+        "widget_ue_connectable": {}
+      },
+      "widgets_values": [
+        "Image_04204_.png",
+        "image"
+      ]
+    },
+    {
+      "id": 10,
+      "type": "Hy3DBakeMultiViewsWithMetaData",
+      "pos": [
+        45.26637268066406,
+        685.194091796875
+      ],
+      "size": [
+        343.8941345214844,
+        86
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "pipeline",
+          "type": "HY3DPIPELINE",
+          "link": 21
+        },
+        {
+          "name": "albedo",
+          "type": "IMAGE",
+          "link": 34
+        },
+        {
+          "name": "mr",
+          "type": "IMAGE",
+          "link": 35
+        },
+        {
+          "name": "metadata",
+          "type": "HY3D21METADATA",
+          "link": 24
+        }
+      ],
+      "outputs": [
+        {
+          "name": "albedo",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "mr",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "trimesh",
+          "type": "TRIMESH",
+          "links": null
+        },
+        {
+          "name": "output_glb_path",
+          "type": "STRING",
+          "links": [
+            25
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "visualbruno/ComfyUI-Hunyuan3d-2-1",
+        "ver": "2d53912e3b5bce562d59cf1c3f67d1e75c98529c",
+        "widget_ue_connectable": {},
+        "Node name for S&R": "Hy3DBakeMultiViewsWithMetaData"
+      }
+    },
+    {
+      "id": 8,
+      "type": "Preview3D",
+      "pos": [
+        442.95281982421875,
+        724.7206420898438
+      ],
+      "size": [
+        400,
+        550
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "camera_info",
+          "shape": 7,
+          "type": "LOAD3D_CAMERA",
+          "link": null
+        },
+        {
+          "name": "model_file",
+          "type": "STRING",
+          "widget": {
+            "name": "model_file"
+          },
+          "link": 25
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.3.44",
+        "Node name for S&R": "Preview3D",
+        "widget_ue_connectable": {},
+        "Last Time Model File": "C:/Git/ComfyUI/output/3D/CyberWarrior_Hy21/CyberWarrior_Hy21.glb",
+        "Camera Info": {
+          "position": {
+            "x": -4.067225002381108,
+            "y": 7.027846867717355,
+            "z": 8.596655632161267
+          },
+          "target": {
+            "x": 0,
+            "y": 2.5,
+            "z": 0
+          },
+          "zoom": 1,
+          "cameraType": "perspective"
+        }
+      },
+      "widgets_values": [
+        "C:/Git/ComfyUI/output/3D/CyberWarrior_Hy21/CyberWarrior_Hy21.glb",
+        ""
+      ]
+    },
+    {
+      "id": 9,
+      "type": "Hy3D21MultiViewsGeneratorWithMetaData",
+      "pos": [
+        -445.18731689453125,
+        686.0006713867188
+      ],
+      "size": [
+        435.0181579589844,
+        326
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "trimesh",
+          "type": "TRIMESH",
+          "link": 14
+        },
+        {
+          "name": "camera_config",
+          "type": "HY3D21CAMERA",
+          "link": 15
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 16
+        }
+      ],
+      "outputs": [
+        {
+          "name": "pipeline",
+          "type": "HY3DPIPELINE",
+          "links": [
+            21
+          ]
+        },
+        {
+          "name": "albedo",
+          "type": "IMAGE",
+          "links": [
+            34
+          ]
+        },
+        {
+          "name": "mr",
+          "type": "IMAGE",
+          "links": [
+            35
+          ]
+        },
+        {
+          "name": "metadata",
+          "type": "HY3D21METADATA",
+          "links": [
+            24
+          ]
+        },
+        {
+          "name": "positions",
+          "type": "IMAGE",
+          "links": null
+        },
+        {
+          "name": "normals",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "aux_id": "visualbruno/ComfyUI-Hunyuan3d-2-1",
+        "ver": "2d53912e3b5bce562d59cf1c3f67d1e75c98529c",
+        "widget_ue_connectable": {},
+        "Node name for S&R": "Hy3D21MultiViewsGeneratorWithMetaData"
+      },
+      "widgets_values": [
+        512,
+        10,
+        3,
+        1024,
+        false,
+        968782590281874,
+        "randomize",
+        "CyberWarrior_Hy21"
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "TRIMESH"
+    ],
+    [
+      14,
+      2,
+      0,
+      9,
+      0,
+      "TRIMESH"
+    ],
+    [
+      15,
+      3,
+      0,
+      9,
+      1,
+      "HY3D21CAMERA"
+    ],
+    [
+      16,
+      4,
+      2,
+      9,
+      2,
+      "IMAGE"
+    ],
+    [
+      21,
+      9,
+      0,
+      10,
+      0,
+      "HY3DPIPELINE"
+    ],
+    [
+      24,
+      9,
+      3,
+      10,
+      3,
+      "HY3D21METADATA"
+    ],
+    [
+      25,
+      10,
+      3,
+      8,
+      1,
+      "STRING"
+    ],
+    [
+      34,
+      9,
+      1,
+      10,
+      1,
+      "IMAGE"
+    ],
+    [
+      35,
+      9,
+      2,
+      10,
+      2,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ue_links": [],
+    "ds": {
+      "scale": 0.8264462809917354,
+      "offset": [
+        1019.5337188720696,
+        -291.54056213378885
+      ]
+    },
+    "links_added_by_ue": [],
+    "frontendVersion": "1.23.4"
+  },
+  "version": 0.4
+}
