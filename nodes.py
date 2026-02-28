@@ -252,6 +252,9 @@ class MetaData:
     
         
 class Hy3DMeshGenerator:
+    _pipeline_cache = None
+    _cached_model_key = None
+
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -262,6 +265,7 @@ class Hy3DMeshGenerator:
                 "guidance_scale": ("FLOAT", {"default": 5.0, "min": 1, "max": 30, "step": 0.1, "tooltip": "Guidance scale"}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
                 "attention_mode": (["sdpa", "sageattn"], {"default": "sdpa"}),
+                "keep_models_loaded": ("BOOLEAN", {"default": False, "tooltip": "Keep the mesh generation model in VRAM between runs."}),
             },
         }
 
@@ -270,7 +274,7 @@ class Hy3DMeshGenerator:
     FUNCTION = "loadmodel"
     CATEGORY = "Hunyuan3D21Wrapper"
 
-    def loadmodel(self, model, image, steps, guidance_scale, seed, attention_mode):
+    def loadmodel(self, model, image, steps, guidance_scale, seed, attention_mode, keep_models_loaded):
         device = mm.get_torch_device()
         offload_device=mm.unet_offload_device()
         
@@ -281,12 +285,20 @@ class Hy3DMeshGenerator:
         #import torchvision.transforms as T
 
         model_path = folder_paths.get_full_path("diffusion_models", model)
-        
-        pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_single_file(
-            config_path=os.path.join(script_directory, 'configs', 'dit_config_2_1.yaml'),
-            ckpt_path=model_path,
-            offload_device=offload_device,
-            attention_mode=attention_mode)
+
+        cache_key = (model_path, attention_mode)
+        use_cache = keep_models_loaded and self._pipeline_cache is not None and self._cached_model_key == cache_key
+        if use_cache:
+            pipeline = self._pipeline_cache
+        else:
+            pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_single_file(
+                config_path=os.path.join(script_directory, 'configs', 'dit_config_2_1.yaml'),
+                ckpt_path=model_path,
+                offload_device=offload_device,
+                attention_mode=attention_mode)
+            if keep_models_loaded:
+                self._pipeline_cache = pipeline
+                self._cached_model_key = cache_key
         
         # to_pil = T.ToPILImage()
         # image = to_pil(image[0].permute(2, 0, 1))
@@ -304,12 +316,13 @@ class Hy3DMeshGenerator:
             generator=torch.manual_seed(seed)
             )
             
-        del pipeline
-        #del vae
-        
-        mm.soft_empty_cache()
-        torch.cuda.empty_cache()
-        gc.collect()            
+        if not keep_models_loaded:
+            del pipeline
+            #del vae
+
+            mm.soft_empty_cache()
+            torch.cuda.empty_cache()
+            gc.collect()
         
         return (latents,)
         
