@@ -61,8 +61,12 @@ def remove_floater(mesh: pymeshlab.MeshSet):
 
 def pymeshlab2trimesh(mesh: pymeshlab.MeshSet):
     with tempfile.NamedTemporaryFile(suffix='.ply', delete=False) as temp_file:
-        mesh.save_current_mesh(temp_file.name)
-        mesh = trimesh.load(temp_file.name)
+        try:
+            mesh.save_current_mesh(temp_file.name)
+            mesh = trimesh.load(temp_file.name)
+        finally:
+            if os.path.exists(temp_file.name):
+                os.unlink(temp_file.name)
     # 检查加载的对象类型
     if isinstance(mesh, trimesh.Scene):
         combined_mesh = trimesh.Trimesh()
@@ -75,16 +79,20 @@ def pymeshlab2trimesh(mesh: pymeshlab.MeshSet):
 
 def trimesh2pymeshlab(mesh: trimesh.Trimesh):
     with tempfile.NamedTemporaryFile(suffix='.ply', delete=False) as temp_file:
-        if isinstance(mesh, trimesh.scene.Scene):
-            for idx, obj in enumerate(mesh.geometry.values()):
-                if idx == 0:
-                    temp_mesh = obj
-                else:
-                    temp_mesh = temp_mesh + obj
-            mesh = temp_mesh
-        mesh.export(temp_file.name)
-        mesh = pymeshlab.MeshSet()
-        mesh.load_new_mesh(temp_file.name)
+        try:
+            if isinstance(mesh, trimesh.scene.Scene):
+                for idx, obj in enumerate(mesh.geometry.values()):
+                    if idx == 0:
+                        temp_mesh = obj
+                    else:
+                        temp_mesh = temp_mesh + obj
+                mesh = temp_mesh
+            mesh.export(temp_file.name)
+            mesh = pymeshlab.MeshSet()
+            mesh.load_new_mesh(temp_file.name)
+        finally:
+            if os.path.exists(temp_file.name):
+                os.unlink(temp_file.name)
     return mesh
 
 
@@ -149,9 +157,13 @@ class DegenerateFaceRemover:
         ms = import_mesh(mesh)
 
         with tempfile.NamedTemporaryFile(suffix='.ply', delete=False) as temp_file:
-            ms.save_current_mesh(temp_file.name)
-            ms = pymeshlab.MeshSet()
-            ms.load_new_mesh(temp_file.name)
+            try:
+                ms.save_current_mesh(temp_file.name)
+                ms = pymeshlab.MeshSet()
+                ms.load_new_mesh(temp_file.name)
+            finally:
+                if os.path.exists(temp_file.name):
+                    os.unlink(temp_file.name)
 
         mesh = export_mesh(mesh, ms)
         return mesh
@@ -190,13 +202,18 @@ class MeshSimplifier:
     ) -> Union[trimesh.Trimesh]:
         with tempfile.NamedTemporaryFile(suffix='.obj', delete=False) as temp_input:
             with tempfile.NamedTemporaryFile(suffix='.obj', delete=False) as temp_output:
-                mesh.export(temp_input.name)
-                os.system(f'{self.executable} {temp_input.name} {temp_output.name}')
-                ms = trimesh.load(temp_output.name, process=False)
-                if isinstance(ms, trimesh.Scene):
-                    combined_mesh = trimesh.Trimesh()
-                    for geom in ms.geometry.values():
-                        combined_mesh = trimesh.util.concatenate([combined_mesh, geom])
-                    ms = combined_mesh
-                ms = mesh_normalize(ms)
-                return ms
+                try:
+                    mesh.export(temp_input.name)
+                    os.system(f'{self.executable} {temp_input.name} {temp_output.name}')
+                    ms = trimesh.load(temp_output.name, process=False)
+                    if isinstance(ms, trimesh.Scene):
+                        combined_mesh = trimesh.Trimesh()
+                        for geom in ms.geometry.values():
+                            combined_mesh = trimesh.util.concatenate([combined_mesh, geom])
+                        ms = combined_mesh
+                    ms = mesh_normalize(ms)
+                    return ms
+                finally:
+                    for path in (temp_input.name, temp_output.name):
+                        if os.path.exists(path):
+                            os.unlink(path)
