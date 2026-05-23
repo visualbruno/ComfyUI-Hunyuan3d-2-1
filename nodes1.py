@@ -330,8 +330,7 @@ class Hy3DMeshGenerator:
         if target_dtype != safe_load_dtype:
             if hasattr(pipeline, 'model') and pipeline.model is not None:
                 pipeline.model.to(target_dtype)
-            if hasattr(pipeline, 'vae') and pipeline.vae is not None:
-                pipeline.vae.to(target_dtype)
+           
                 
         if hasattr(pipeline, 'enable_sequential_cpu_offload'):
             pipeline.enable_sequential_cpu_offload()
@@ -624,7 +623,7 @@ class Hy3D21VAELoader:
         return {
             "required": {
                 "model_name": (folder_paths.get_filename_list("vae"), {"tooltip": "These models are loaded from 'ComfyUI/models/vae'"}),
-                "precision": (["fp16", "fp8_e4m3fn", "bf16", "fp32"], {"default": "fp16"}),
+                "precision": (["fp16", "fp8_e5m2", "fp8_e4m3fn", "bf16", "fp32"], {"default": "fp16"}),
             },
             "optional":{
                 "vae_config": ("HY3D21VAECONFIG",),
@@ -637,15 +636,23 @@ class Hy3D21VAELoader:
     CATEGORY = "Hunyuan3D21Wrapper"
 
     def loadmodel(self, model_name, precision, vae_config=None):
+        import logging
         device = mm.get_torch_device()
         offload_device=mm.unet_offload_device()
         dtype_map = {
             "fp16": torch.float16,
             "fp8_e4m3fn": torch.float8_e4m3fn,
+            "fp8_e5m2": torch.float8_e5m2,
             "bf16": torch.bfloat16,
             "fp32": torch.float32
         }
         target_dtype = dtype_map.get(precision, torch.float16)
+        safe_load_dtype = torch.float16
+
+        if hasattr(target_dtype, 'itemsize') and hasattr(safe_load_dtype, 'itemsize'):
+            if target_dtype.itemsize > safe_load_dtype.itemsize:
+                logging.warning(f"[Hunyuan3D VAE Optimizer] Blocked useless upcast from {safe_load_dtype} to {target_dtype}. Falling back to native {safe_load_dtype}.")
+                target_dtype = safe_load_dtype
 
         model_path = folder_paths.get_full_path("vae", model_name)
 
@@ -761,9 +768,10 @@ class Hy3D21VAEDecode:
 
         mm.soft_empty_cache()
         torch.cuda.empty_cache()
+        incoming_dtype = latents.dtype
 
-        vae.to(device)
-        latents = latents.to(dtype=vae.geo_decoder.layers[0].weight.dtype if hasattr(vae, 'geo_decoder') else torch.float16)
+        vae.to(device, dtype=incoming_dtype)
+        latents = latents.to(device=device, dtype=incoming_dtype)
         
         vae.enable_flashvdm_decoder(enabled=enable_flash_vdm, mc_algo=mc_algo)
         
