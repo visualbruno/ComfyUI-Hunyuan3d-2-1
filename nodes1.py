@@ -254,15 +254,28 @@ class MetaData:
 class Hy3DMeshGenerator:
     @classmethod
     def INPUT_TYPES(s):
+        #dynamic loding for models
+        diffusion_files = folder_paths.get_filename_list("diffusion_models")
+
+        checkpoint_files = folder_paths.get_filename_list("checkpoints")
+
+        all_possible_files = list(set(diffusion_files + checkpoint_files))
+
+        filtered_3d_models = [
+            f for f in all_possible_files 
+            if "hunyuan" in f.lower() or "hy3d" in f.lower()
+        ]
+        if not filtered_3d_models:
+            filtered_3d_models = ["No Hunyuan Models Found! Place them in checkpoints or diffusion_models"]
         return {
             "required": {
-                "model": (folder_paths.get_filename_list("diffusion_models"), {"tooltip": "These models are loaded from the 'ComfyUI/models/diffusion_models' -folder"}),
+                "model": (filtered_3d_models, {"tooltip": "Scans both checkpoints & diffusion_models for Hunyuan files"}),
                 "image": ("IMAGE", {"tooltip": "Image to generate mesh from"}),
                 "steps": ("INT", {"default": 50, "min": 1, "max": 100, "step": 1, "tooltip": "Number of diffusion steps"}),
                 "guidance_scale": ("FLOAT", {"default": 5.0, "min": 1, "max": 30, "step": 0.1, "tooltip": "Guidance scale"}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
                 "attention_mode": (["sdpa", "sageattn"], {"default": "sdpa"}),
-                "precision": (["fp16", "fp8_e4m3fn", "bf16", "fp32"], {"default": "fp16"}),
+                "precision": (["fp16", "fp8_e5m2", "fp8_e4m3fn", "bf16", "fp32"], {"default": "fp16"}),
             },
         }
 
@@ -272,34 +285,57 @@ class Hy3DMeshGenerator:
     CATEGORY = "Hunyuan3D21Wrapper"
 
     def loadmodel(self, model, image, steps, guidance_scale, seed, attention_mode,precision):
+        import logging
         #device = mm.get_torch_device()
         offload_device=mm.unet_offload_device()
+        # DYNAMIC RESOLVER: Check checkpoints first, then fall back to diffusion_models
+        model_path = folder_paths.get_full_path("checkpoints", model)
+        
+        if not model_path or not os.path.exists(model_path):
+            # If it's not in standard checkpoints, look inside the loose diffusion folder
+            model_path = folder_paths.get_full_path("diffusion_models", model)
+            
+        if not model_path or not os.path.exists(model_path):
+            raise FileNotFoundError(f"Could not locate the model file: {model}")
         
         seed = seed % (2**32)
         # Map the UI string to the actual PyTorch datatype
         dtype_map = {
             "fp16": torch.float16,
             "fp8_e4m3fn": torch.float8_e4m3fn,
+            "fp8_e5m2": torch.float8_e5m2,
             "bf16": torch.bfloat16,
             "fp32": torch.float32
         }
         target_dtype = dtype_map.get(precision, torch.float16)
 
+        safe_load_dtype = torch.float16
+
+        if hasattr(target_dtype, 'itemsize') and hasattr(safe_load_dtype, 'itemsize'):
+            if target_dtype.itemsize > safe_load_dtype.itemsize:
+                # Passes a clean message to the ComfyUI frontend logger instead of terminal spam
+                logging.warning(f"[Hunyuan3D Optimizer] Blocked useless upcast from {safe_load_dtype} to {target_dtype}. It adds no quality and wastes VRAM. Falling back to native {safe_load_dtype}.")
+                target_dtype = safe_load_dtype
         #from .hy3dshape.hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
         #from .hy3dshape.hy3dshape.rembg import BackgroundRemover
         #import torchvision.transforms as T
-
-        model_path = folder_paths.get_full_path("diffusion_models", model)
         
         pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_single_file(
             config_path=os.path.join(script_directory, 'configs', 'dit_config_2_1.yaml'),
             ckpt_path=model_path,
             offload_device=offload_device,
             attention_mode=attention_mode,
-            torch_dtype=target_dtype)
-        
+            torch_dtype=safe_load_dtype)
+       
+        if target_dtype != safe_load_dtype:
+            if hasattr(pipeline, 'model') and pipeline.model is not None:
+                pipeline.model.to(target_dtype)
+            if hasattr(pipeline, 'vae') and pipeline.vae is not None:
+                pipeline.vae.to(target_dtype)
+                
         if hasattr(pipeline, 'enable_sequential_cpu_offload'):
             pipeline.enable_sequential_cpu_offload()
+        
         # to_pil = T.ToPILImage()
         # image = to_pil(image[0].permute(2, 0, 1))
         
@@ -321,6 +357,8 @@ class Hy3DMeshGenerator:
         
         mm.soft_empty_cache()
         torch.cuda.empty_cache()
+        torch.cuda.reset_max_memory_allocated() # <--- Wipes out the fragmented allocation logs
+        torch.cuda.reset_peak_memory_stats()
         gc.collect()            
         
         return (latents,)
