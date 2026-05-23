@@ -298,6 +298,8 @@ class Hy3DMeshGenerator:
             attention_mode=attention_mode,
             torch_dtype=target_dtype)
         
+        if hasattr(pipeline, 'enable_sequential_cpu_offload'):
+            pipeline.enable_sequential_cpu_offload()
         # to_pil = T.ToPILImage()
         # image = to_pil(image[0].permute(2, 0, 1))
         
