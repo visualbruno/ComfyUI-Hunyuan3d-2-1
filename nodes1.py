@@ -1,8 +1,13 @@
 from PIL import Image, ImageSequence, ImageOps
+from torch.utils.data import Dataset
 import torch
 import shutil
 import argparse
 import copy
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from torchvision.utils import save_image as imwrite
+from torchvision import transforms
 import os
 import time
 import re
@@ -11,8 +16,24 @@ import torch.nn.functional as F
 import trimesh as Trimesh
 import gc
 import json
+from .hy3dshape.hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
+from .hy3dshape.hy3dshape.postprocessors import FaceReducer, FloaterRemover, DegenerateFaceRemover
+from .hy3dshape.hy3dshape.rembg import BackgroundRemover
 from typing import Union, Optional, Tuple, List, Any, Callable
 from pathlib import Path
+
+#painting
+from .hy3dpaint.DifferentiableRenderer.MeshRender import MeshRender
+from .hy3dpaint.utils.simplify_mesh_utils import remesh_mesh
+from .hy3dpaint.utils.multiview_utils import multiviewDiffusionNet
+from .hy3dpaint.utils.pipeline_utils import ViewProcessor
+from .hy3dpaint.utils.image_super_utils import imageSuperNet
+from .hy3dpaint.utils.uvwrap_utils import mesh_uv_wrap
+from .hy3dpaint.convert_utils import create_glb_with_pbr_materials
+from .hy3dpaint.textureGenPipeline import Hunyuan3DPaintPipeline, Hunyuan3DPaintConfig
+from .hy3dshape.hy3dshape.models.autoencoders import ShapeVAE
+
+from .hy3dshape.hy3dshape.meshlib import postprocessmesh
 
 from spandrel import ModelLoader, ImageModelDescriptor
 
@@ -23,59 +44,6 @@ import hashlib
 import comfy.model_management as mm
 from comfy.utils import load_torch_file, ProgressBar
 import comfy.utils
-
-
-class _LazyImport:
-    """Defer a heavy import until the symbol is first actually used.
-
-    Importing the shape/paint stacks at module scope made ComfyUI's startup scan
-    of this pack cost 10.7s (now 0.6s): diffusers, transformers, meshlib, plus
-    two separate paths into onnxruntime -- rembg, and textureGenPipeline ->
-    multiview_utils -> pytorch_lightning -> torchmetrics.functional.audio.
-    None of it is needed until a node actually runs, so we bind a proxy here
-    and resolve it on first use.
-
-    Note this only moves the cost off startup; whichever pack loads first and
-    eagerly imports the same shared stack (ComfyUI-Hunyuan3DWrapper does) will
-    pay it instead.
-
-    Only safe for names that are exclusively called or attribute-accessed;
-    anything used with isinstance() or subclassed must stay a real import.
-    """
-
-    __slots__ = ("_module", "_attr", "_resolved")
-
-    def __init__(self, module, attr):
-        self._module = module
-        self._attr = attr
-        self._resolved = None
-
-    def _get(self):
-        if self._resolved is None:
-            from importlib import import_module
-            self._resolved = getattr(import_module(self._module, __package__), self._attr)
-        return self._resolved
-
-    def __call__(self, *args, **kwargs):
-        return self._get()(*args, **kwargs)
-
-    def __getattr__(self, name):
-        return getattr(self._get(), name)
-
-
-#shape
-Hunyuan3DDiTFlowMatchingPipeline = _LazyImport(".hy3dshape.hy3dshape.pipelines", "Hunyuan3DDiTFlowMatchingPipeline")
-FaceReducer = _LazyImport(".hy3dshape.hy3dshape.postprocessors", "FaceReducer")
-FloaterRemover = _LazyImport(".hy3dshape.hy3dshape.postprocessors", "FloaterRemover")
-DegenerateFaceRemover = _LazyImport(".hy3dshape.hy3dshape.postprocessors", "DegenerateFaceRemover")
-BackgroundRemover = _LazyImport(".hy3dshape.hy3dshape.rembg", "BackgroundRemover")
-ShapeVAE = _LazyImport(".hy3dshape.hy3dshape.models.autoencoders", "ShapeVAE")
-postprocessmesh = _LazyImport(".hy3dshape.hy3dshape.meshlib", "postprocessmesh")
-
-#painting
-mesh_uv_wrap = _LazyImport(".hy3dpaint.utils.uvwrap_utils", "mesh_uv_wrap")
-Hunyuan3DPaintPipeline = _LazyImport(".hy3dpaint.textureGenPipeline", "Hunyuan3DPaintPipeline")
-Hunyuan3DPaintConfig = _LazyImport(".hy3dpaint.textureGenPipeline", "Hunyuan3DPaintConfig")
 
 script_directory = os.path.dirname(os.path.abspath(__file__))
 comfy_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -283,12 +251,25 @@ class MetaData:
         self.mesh_file = None
     
         
-class Hy3D21MeshGenerator:
+class Hy3DMeshGenerator:
     @classmethod
     def INPUT_TYPES(s):
+        #dynamic loding for models
+        diffusion_files = folder_paths.get_filename_list("diffusion_models")
+
+        checkpoint_files = folder_paths.get_filename_list("checkpoints")
+
+        all_possible_files = list(set(diffusion_files + checkpoint_files))
+
+        filtered_3d_models = [
+            f for f in all_possible_files 
+            if "hunyuan" in f.lower() or "hy3d" in f.lower()
+        ]
+        if not filtered_3d_models:
+            filtered_3d_models = ["No Hunyuan Models Found! Place them in checkpoints or diffusion_models"]
         return {
             "required": {
-                "model": (folder_paths.get_filename_list("diffusion_models"), {"tooltip": "These models are loaded from the 'ComfyUI/models/diffusion_models' -folder"}),
+                "model": (filtered_3d_models, {"tooltip": "Scans both checkpoints & diffusion_models for Hunyuan files"}),
                 "image": ("IMAGE", {"tooltip": "Image to generate mesh from"}),
                 "steps": ("INT", {"default": 50, "min": 1, "max": 100, "step": 1, "tooltip": "Number of diffusion steps"}),
                 "guidance_scale": ("FLOAT", {"default": 5.0, "min": 1, "max": 30, "step": 0.1, "tooltip": "Guidance scale"}),
@@ -307,19 +288,18 @@ class Hy3D21MeshGenerator:
         import logging
         #device = mm.get_torch_device()
         offload_device=mm.unet_offload_device()
+        # DYNAMIC RESOLVER: Check checkpoints first, then fall back to diffusion_models
         model_path = folder_paths.get_full_path("checkpoints", model)
         
         if not model_path or not os.path.exists(model_path):
+            # If it's not in standard checkpoints, look inside the loose diffusion folder
             model_path = folder_paths.get_full_path("diffusion_models", model)
             
         if not model_path or not os.path.exists(model_path):
             raise FileNotFoundError(f"Could not locate the model file: {model}")
+        
         seed = seed % (2**32)
-
-        #from .hy3dshape.hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
-        #from .hy3dshape.hy3dshape.rembg import BackgroundRemover
-        #import torchvision.transforms as T
-
+        # Map the UI string to the actual PyTorch datatype
         dtype_map = {
             "fp16": torch.float16,
             "fp8_e4m3fn": torch.float8_e4m3fn,
@@ -334,21 +314,27 @@ class Hy3D21MeshGenerator:
         if hasattr(target_dtype, 'itemsize') and hasattr(safe_load_dtype, 'itemsize'):
             if target_dtype.itemsize > safe_load_dtype.itemsize:
                 # Passes a clean message to the ComfyUI frontend logger instead of terminal spam
-                logging.warning(f"[Hunyuan3D Optimizer] Blocked useless upcast from {safe_load_dtype} to {target_dtype}. Falling back to native {safe_load_dtype}.")
-                target_dtype = safe_load_dtype        
-            pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_single_file(
+                logging.warning(f"[Hunyuan3D Optimizer] Blocked useless upcast from {safe_load_dtype} to {target_dtype}. It adds no quality and wastes VRAM. Falling back to native {safe_load_dtype}.")
+                target_dtype = safe_load_dtype
+        #from .hy3dshape.hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
+        #from .hy3dshape.hy3dshape.rembg import BackgroundRemover
+        #import torchvision.transforms as T
+        
+        pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_single_file(
             config_path=os.path.join(script_directory, 'configs', 'dit_config_2_1.yaml'),
             ckpt_path=model_path,
             offload_device=offload_device,
             attention_mode=attention_mode,
-            torch_dtype=safe_load_dtype
-            )
-        #from .hy3dshape.hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
-        #from .hy3dshape.hy3dshape.rembg import BackgroundRemover
-        #import torchvision.transforms as T
+            torch_dtype=safe_load_dtype)
+       
         if target_dtype != safe_load_dtype:
             if hasattr(pipeline, 'model') and pipeline.model is not None:
                 pipeline.model.to(target_dtype)
+           
+                
+        if hasattr(pipeline, 'enable_sequential_cpu_offload'):
+            pipeline.enable_sequential_cpu_offload()
+        
         # to_pil = T.ToPILImage()
         # image = to_pil(image[0].permute(2, 0, 1))
         
@@ -785,7 +771,8 @@ class Hy3D21VAEDecode:
         incoming_dtype = latents.dtype
 
         vae.to(device, dtype=incoming_dtype)
-        latents = latents.to(device=device, dtype=incoming_dtype) 
+        latents = latents.to(device=device, dtype=incoming_dtype)
+        
         vae.enable_flashvdm_decoder(enabled=enable_flash_vdm, mc_algo=mc_algo)
         
         latents = vae.decode(latents)
@@ -1164,9 +1151,6 @@ class Hy3D21MeshlibDecimate:
         settings = mrmeshpy.DecimateSettings()
         if target_face_num > 0:
             faces_to_delete = current_faces_num - target_face_num
-            if faces_to_delete<=0:
-                return trimesh
-                
             settings.maxDeletedFaces = faces_to_delete
         elif target_face_ratio > 0.0:
             target_faces = int(current_faces_num * target_face_ratio)
@@ -1250,7 +1234,7 @@ class Hy3D21SimpleMeshlibDecimate:
 
         settings = mrmeshpy.DecimateSettings()
         if target_face_num > 0:
-            faces_to_delete = current_faces_num - target_face_num                
+            faces_to_delete = current_faces_num - target_face_num
             settings.maxDeletedFaces = faces_to_delete
         elif target_face_ratio > 0.0:
             target_faces = int(current_faces_num * target_face_ratio)
@@ -1258,9 +1242,6 @@ class Hy3D21SimpleMeshlibDecimate:
             settings.maxDeletedFaces = faces_to_delete
         else:
             raise ValueError('target_face_num or target_face_ratio must be set')        
-            
-        if faces_to_delete<=0:
-            return trimesh            
             
         settings.packMesh = True
         settings.subdivideParts = subdivideParts
@@ -2041,185 +2022,10 @@ class Hy3DHighPolyToLowPolyBakeMultiViewsWithMetaData:
         else:
             print('target_face_nums is empty')       
         
-        return (output_lowpoly_path,)       
-
-class Hy3D21ModelLoader:
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-            },
-            "optional":{
-            }
-        }
-
-    RETURN_TYPES = ("STRING", "HY3DVAE",)
-    RETURN_NAMES = ("model_path", "vae",)
-    FUNCTION = "loadmodel"
-    CATEGORY = "Hunyuan3D21Wrapper"
-
-    def loadmodel(self):
-        device = mm.get_torch_device()
-        offload_device=mm.unet_offload_device()
-        
-        model_path = os.path.join(folder_paths.models_dir,"diffusion_models", "hunyuan3D-dit-v2-1-fp16.ckpt")
-        if not os.path.exists(model_path):
-            print('Downloading vae ...')
-            from huggingface_hub import hf_hub_download
-            import shutil
-
-            repo_id = "tencent/Hunyuan3D-2.1"
-            target_dir = os.path.join(folder_paths.models_dir, "diffusion_models")
-            os.makedirs(target_dir, exist_ok=True)
-
-            os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
-
-            repo_filename = "hunyuan3d-dit-v2-1/model.fp16.ckpt"
-            desired_filename = "hunyuan3D-dit-v2-1-fp16.ckpt"
-
-            print(f"downloading {repo_filename} ...")
-            downloaded_path = hf_hub_download(
-                repo_id=repo_id,
-                filename=repo_filename,
-                local_dir=target_dir,
-                local_dir_use_symlinks=False,
-            )
-
-            final_path = os.path.join(target_dir, desired_filename)
-            shutil.move(downloaded_path, final_path)
-            print(f"{repo_filename} -> {final_path}")
-
-            # clean up the now-empty subfolder created by hf_hub_download
-            subfolder = os.path.dirname(downloaded_path)
-            try:
-                os.rmdir(subfolder)
-            except OSError:
-                pass  # not empty, or already gone         
-
-        vae_path = os.path.join(folder_paths.models_dir,"vae", "Hunyuan3D-vae-v2-1-fp16.ckpt")
-        if not os.path.exists(vae_path):
-            print('Downloading vae ...')
-            from huggingface_hub import hf_hub_download
-            import shutil
-
-            repo_id = "tencent/Hunyuan3D-2.1"
-            target_dir = os.path.join(folder_paths.models_dir, "vae")
-            os.makedirs(target_dir, exist_ok=True)
-
-            os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
-
-            repo_filename = "hunyuan3d-vae-v2-1/model.fp16.ckpt"
-            desired_filename = "Hunyuan3D-vae-v2-1-fp16.ckpt"
-
-            print(f"downloading {repo_filename} ...")
-            downloaded_path = hf_hub_download(
-                repo_id=repo_id,
-                filename=repo_filename,
-                local_dir=target_dir,
-                local_dir_use_symlinks=False,
-            )
-
-            final_path = os.path.join(target_dir, desired_filename)
-            shutil.move(downloaded_path, final_path)
-            print(f"{repo_filename} -> {final_path}")
-
-            # clean up the now-empty subfolder created by hf_hub_download
-            subfolder = os.path.dirname(downloaded_path)
-            try:
-                os.rmdir(subfolder)
-            except OSError:
-                pass  # not empty, or already gone  
-                
-        vae_sd = load_torch_file(vae_path)
-        
-        vae_config = {
-            'num_latents': 4096,
-            'embed_dim': 64,
-            'num_freqs': 8,
-            'include_pi': False,
-            'heads': 16,
-            'width': 1024,
-            'num_encoder_layers': 8,
-            'num_decoder_layers': 16,
-            'qkv_bias': False,
-            'qk_norm': True,
-            'scale_factor': 1.0039506158752403,
-            'geo_decoder_mlp_expand_ratio': 4,
-            'geo_decoder_downsample_ratio': 1,
-            'geo_decoder_ln_post': True,
-            'point_feats': 4,
-            'pc_size': 81920,
-            'pc_sharpedge_size': 0
-        }
-
-        vae = ShapeVAE(**vae_config)
-        vae.load_state_dict(vae_sd)
-        vae.eval().to(torch.float16)
-        
-        return (model_path, vae,)
-
-class Hy3D21MeshGenerator2:
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "model_path": ("STRING",),
-                "image": ("IMAGE", {"tooltip": "Image to generate mesh from"}),
-                "steps": ("INT", {"default": 50, "min": 1, "max": 100, "step": 1, "tooltip": "Number of diffusion steps"}),
-                "guidance_scale": ("FLOAT", {"default": 5.0, "min": 1, "max": 30, "step": 0.1, "tooltip": "Guidance scale"}),
-                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
-                "attention_mode": (["sdpa", "sageattn"], {"default": "sdpa"}),
-            },
-        }
-
-    RETURN_TYPES = ("HY3DLATENT",)
-    RETURN_NAMES = ("latents",)
-    FUNCTION = "loadmodel"
-    CATEGORY = "Hunyuan3D21Wrapper"
-
-    def loadmodel(self, model_path, image, steps, guidance_scale, seed, attention_mode):
-        device = mm.get_torch_device()
-        offload_device=mm.unet_offload_device()
-        
-        seed = seed % (2**32)
-
-        #from .hy3dshape.hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
-        #from .hy3dshape.hy3dshape.rembg import BackgroundRemover
-        #import torchvision.transforms as T
-        
-        pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_single_file(
-            config_path=os.path.join(script_directory, 'configs', 'dit_config_2_1.yaml'),
-            ckpt_path=model_path,
-            offload_device=offload_device,
-            attention_mode=attention_mode)
-        
-        # to_pil = T.ToPILImage()
-        # image = to_pil(image[0].permute(2, 0, 1))
-        
-        # if image.mode == 'RGB':
-            # rembg = BackgroundRemover()
-            # image = rembg(image)
-            
-        image = tensor2pil(image)
-        
-        latents = pipeline(
-            image=image,
-            num_inference_steps=steps,
-            guidance_scale=guidance_scale,
-            generator=torch.manual_seed(seed)
-            )
-            
-        del pipeline
-        #del vae
-        
-        mm.soft_empty_cache()
-        torch.cuda.empty_cache()
-        gc.collect()            
-        
-        return (latents,)        
+        return (output_lowpoly_path,)        
 
 NODE_CLASS_MAPPINGS = {
-    "Hy3D21MeshGenerator": Hy3D21MeshGenerator,
+    "Hy3DMeshGenerator": Hy3DMeshGenerator,
     "Hy3DMultiViewsGenerator": Hy3DMultiViewsGenerator,
     "Hy3DBakeMultiViews": Hy3DBakeMultiViews,
     "Hy3DInPaint": Hy3DInPaint,
@@ -2243,13 +2049,11 @@ NODE_CLASS_MAPPINGS = {
     "Hy3DBakeMultiViewsWithMetaData": Hy3DBakeMultiViewsWithMetaData,
     "Hy3DHighPolyToLowPolyBakeMultiViewsWithMetaData": Hy3DHighPolyToLowPolyBakeMultiViewsWithMetaData,
     "Hy3D21SimpleMeshlibDecimate": Hy3D21SimpleMeshlibDecimate,
-    "Hy3D21ModelLoader": Hy3D21ModelLoader,
-    "Hy3D21MeshGenerator2": Hy3D21MeshGenerator2,
     #"Hy3D21MultiViewsMeshGenerator": Hy3D21MultiViewsMeshGenerator,
     }
     
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "Hy3D21MeshGenerator": "Hunyuan 3D 2.1 Mesh Generator",
+    "Hy3DMeshGenerator": "Hunyuan 3D 2.1 Mesh Generator",
     "Hy3DMultiViewsGenerator": "Hunyuan 3D 2.1 MultiViews Generator",
     "Hy3DBakeMultiViews": "Hunyuan 3D 2.1 Bake MultiViews",
     "Hy3DInPaint": "Hunyuan 3D 2.1 InPaint",
@@ -2273,7 +2077,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Hy3DBakeMultiViewsWithMetaData": "Hunyuan 3D 2.1 Bake MultiViews With MetaData",
     "Hy3DHighPolyToLowPolyBakeMultiViewsWithMetaData": "Hunyuan 3D 2.1 HighPoly to LowPoly Bake MultiViews With MetaData",
     "Hy3D21SimpleMeshlibDecimate": "Hunyuan 3D 2.1 Simple Meshlib Decimation",
-    "Hy3D21ModelLoader": "Hunyuan 3D 2.1 - Model Loader",
-    "Hy3D21MeshGenerator2": "Hunyuan 3D 2.1 Mesh Generator2",
     #"Hy3D21MultiViewsMeshGenerator": "Hunyuan 3D 2.1 MultiViews Mesh Generator"
     }
