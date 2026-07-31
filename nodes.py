@@ -1948,7 +1948,7 @@ class Hy3DHighPolyToLowPolyBakeMultiViewsWithMetaData:
                         albedos.append(albedo)
                         
                     for file in loaded_metaData.mrs:
-                        mr_file = os.path.join(dir_name,file)
+                        mr_file = os.path.join(input_dir,file)
                         mr = Image.open(mr_file)
                         mrs.append(mr)
 
