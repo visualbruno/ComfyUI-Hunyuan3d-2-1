@@ -113,15 +113,23 @@ def export_to_trimesh(mesh_output):
 
 
 def get_obj_from_str(string, reload=False):
-    module, cls = string.rsplit(".", 1)
+    # Config targets begin with a dot, but the ComfyUI custom-node folder
+    # contains hyphens and therefore cannot be used as a Python package name.
+    # Import from the custom-node root using an absolute module path instead.
+    import sys
+    from pathlib import Path
+
+    plugin_root = str(Path(__file__).resolve().parents[2])
+    if plugin_root not in sys.path:
+        sys.path.insert(0, plugin_root)
+
+    module, cls = string.lstrip(".").rsplit(".", 1)
+    module_imp = importlib.import_module(module)
+
     if reload:
-        module_imp = importlib.import_module(module)
-        importlib.reload(module_imp)
-    try:
-        obj = getattr(importlib.import_module(module, package=os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))), cls)
-    except:
-        obj = getattr(importlib.import_module(module, package=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath( __file__ ))))), cls)
-    return obj
+        module_imp = importlib.reload(module_imp)
+
+    return getattr(module_imp, cls)
 
 
 def instantiate_from_config(config, **kwargs):
