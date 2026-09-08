@@ -545,9 +545,11 @@ class Hy3DInPaint:
         temp_folder_path = os.path.join(comfy_path, "temp")
         os.makedirs(temp_folder_path, exist_ok=True)        
         output_mesh_path = os.path.join(temp_folder_path, f"{output_mesh_name}.obj")
+        os.makedirs(os.path.dirname(output_mesh_path), exist_ok=True)
         output_temp_path = pipeline.save_mesh(output_mesh_path)
         
         output_glb_path = os.path.join(comfy_path, "output", f"{output_mesh_name}.glb")
+        os.makedirs(os.path.dirname(output_glb_path), exist_ok=True)
         shutil.copyfile(output_temp_path, output_glb_path)
         
         trimesh = Trimesh.load(output_glb_path, force="mesh")
