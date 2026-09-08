@@ -945,33 +945,41 @@ class Hy3D21ExportMesh:
         return {
             "required": {
                 "trimesh": ("TRIMESH",),
-                "filename_prefix": ("STRING", {"default": "3D/Hy3D"}),
+                "filename_prefix": ("STRING", {"default": "3D/Trellis2"}),
                 "file_format": (["glb", "obj", "ply", "stl", "3mf", "dae"],),
-            },
-            "optional": {
-                "save_file": ("BOOLEAN", {"default": True}),
-            },
+            }
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("glb_path",)
+    RETURN_TYPES = ("STRING","STRING","FILE_3D",)
+    RETURN_NAMES = ("glb_path","relative_path","model_3d",)
     FUNCTION = "process"
     CATEGORY = "Hunyuan3D21Wrapper"
     OUTPUT_NODE = True
 
-    def process(self, trimesh, filename_prefix, file_format, save_file=True):
-        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, folder_paths.get_output_directory())
+    def process(self, trimesh, filename_prefix, file_format):        
+        full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(filename_prefix, folder_paths.get_output_directory())                      
         output_glb_path = Path(full_output_folder, f'{filename}_{counter:05}_.{file_format}')
         output_glb_path.parent.mkdir(exist_ok=True)
-        if save_file:
-            trimesh.export(output_glb_path, file_type=file_format)
-            relative_path = Path(subfolder) / f'{filename}_{counter:05}_.{file_format}'
+
+        if file_format=='obj':
+            materialName = f"{filename}_{counter:05}_.mtl"
+            if hasattr(trimesh, 'visual') and hasattr(trimesh.visual, 'material') and trimesh.visual.material is not None:
+                trimesh.visual.material.name = f"{filename}_{counter:05}"
+
+            trimesh.export(output_glb_path, file_type=file_format, mtl_name=materialName)
         else:
-            temp_file = Path(full_output_folder, f'hy3dtemp_.{file_format}')
-            trimesh.export(temp_file, file_type=file_format)
-            relative_path = Path(subfolder) / f'hy3dtemp_.{file_format}'
+            trimesh.export(output_glb_path, file_type=file_format)
+            
+        relative_path = Path(subfolder) / f'{filename}_{counter:05}_.{file_format}'
         
-        return (str(relative_path), )    
+        from comfy_api.latest import Types
+        file_3d = Types.File3D(str(output_glb_path))
+        
+        saved_name = f'{filename}_{counter:05}_.{file_format}'
+        return {
+            "ui": {"3d": [{"filename": saved_name, "subfolder": subfolder, "type": "output"}]},
+            "result": (str(output_glb_path), str(relative_path), file_3d,),
+        }    
 
 class Hy3D21MeshUVWrap:
     @classmethod
