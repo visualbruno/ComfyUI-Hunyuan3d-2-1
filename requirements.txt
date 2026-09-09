@@ -16,5 +16,6 @@ safetensors
 scikit-image
 pybind11
 timm
+rembg
 
 meshlib
