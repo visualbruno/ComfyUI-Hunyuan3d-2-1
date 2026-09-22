@@ -118,9 +118,14 @@ def get_obj_from_str(string, reload=False):
         module_imp = importlib.import_module(module)
         importlib.reload(module_imp)
     try:
-        obj = getattr(importlib.import_module(module, package=os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))), cls)
+        from pathlib import Path
+        base_path = Path(os.path.dirname(os.path.abspath(__file__)))
+        relative_path = Path('../..')
+        package_name = (base_path / relative_path).resolve()
+        obj = getattr(importlib.import_module(module, package=package_name), cls)
     except:
-        obj = getattr(importlib.import_module(module, package=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath( __file__ ))))), cls)
+        package_name = '.'.join(__package__.split('.')[:-2])
+        obj = getattr(importlib.import_module(module, package=package_name), cls)
     return obj
 
 
