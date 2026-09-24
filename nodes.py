@@ -294,6 +294,7 @@ class Hy3D21MeshGenerator:
                 "guidance_scale": ("FLOAT", {"default": 5.0, "min": 1, "max": 30, "step": 0.1, "tooltip": "Guidance scale"}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
                 "attention_mode": (["sdpa", "sageattn"], {"default": "sdpa"}),
+                "precision": (["fp16", "fp8_e5m2", "fp8_e4m3fn", "bf16", "fp32"], {"default": "fp16"}),
             },
         }
 
@@ -302,24 +303,52 @@ class Hy3D21MeshGenerator:
     FUNCTION = "loadmodel"
     CATEGORY = "Hunyuan3D21Wrapper"
 
-    def loadmodel(self, model, image, steps, guidance_scale, seed, attention_mode):
-        device = mm.get_torch_device()
+    def loadmodel(self, model, image, steps, guidance_scale, seed, attention_mode,precision):
+        import logging
+        #device = mm.get_torch_device()
         offload_device=mm.unet_offload_device()
+        model_path = folder_paths.get_full_path("checkpoints", model)
         
+        if not model_path or not os.path.exists(model_path):
+            model_path = folder_paths.get_full_path("diffusion_models", model)
+            
+        if not model_path or not os.path.exists(model_path):
+            raise FileNotFoundError(f"Could not locate the model file: {model}")
         seed = seed % (2**32)
 
         #from .hy3dshape.hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
         #from .hy3dshape.hy3dshape.rembg import BackgroundRemover
         #import torchvision.transforms as T
 
-        model_path = folder_paths.get_full_path("diffusion_models", model)
-        
-        pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_single_file(
+        dtype_map = {
+            "fp16": torch.float16,
+            "fp8_e4m3fn": torch.float8_e4m3fn,
+            "fp8_e5m2": torch.float8_e5m2,
+            "bf16": torch.bfloat16,
+            "fp32": torch.float32
+        }
+        target_dtype = dtype_map.get(precision, torch.float16)
+
+        safe_load_dtype = torch.float16
+
+        if hasattr(target_dtype, 'itemsize') and hasattr(safe_load_dtype, 'itemsize'):
+            if target_dtype.itemsize > safe_load_dtype.itemsize:
+                # Passes a clean message to the ComfyUI frontend logger instead of terminal spam
+                logging.warning(f"[Hunyuan3D Optimizer] Blocked useless upcast from {safe_load_dtype} to {target_dtype}. Falling back to native {safe_load_dtype}.")
+                target_dtype = safe_load_dtype        
+            pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_single_file(
             config_path=os.path.join(script_directory, 'configs', 'dit_config_2_1.yaml'),
             ckpt_path=model_path,
             offload_device=offload_device,
-            attention_mode=attention_mode)
-        
+            attention_mode=attention_mode,
+            torch_dtype=safe_load_dtype
+            )
+        #from .hy3dshape.hy3dshape.pipelines import Hunyuan3DDiTFlowMatchingPipeline
+        #from .hy3dshape.hy3dshape.rembg import BackgroundRemover
+        #import torchvision.transforms as T
+        if target_dtype != safe_load_dtype:
+            if hasattr(pipeline, 'model') and pipeline.model is not None:
+                pipeline.model.to(target_dtype)
         # to_pil = T.ToPILImage()
         # image = to_pil(image[0].permute(2, 0, 1))
         
@@ -341,6 +370,8 @@ class Hy3D21MeshGenerator:
         
         mm.soft_empty_cache()
         torch.cuda.empty_cache()
+        torch.cuda.reset_max_memory_allocated() # <--- Wipes out the fragmented allocation logs
+        torch.cuda.reset_peak_memory_stats()
         gc.collect()            
         
         return (latents,)
@@ -606,6 +637,7 @@ class Hy3D21VAELoader:
         return {
             "required": {
                 "model_name": (folder_paths.get_filename_list("vae"), {"tooltip": "These models are loaded from 'ComfyUI/models/vae'"}),
+                "precision": (["fp16", "fp8_e5m2", "fp8_e4m3fn", "bf16", "fp32"], {"default": "fp16"}),
             },
             "optional":{
                 "vae_config": ("HY3D21VAECONFIG",),
@@ -617,9 +649,24 @@ class Hy3D21VAELoader:
     FUNCTION = "loadmodel"
     CATEGORY = "Hunyuan3D21Wrapper"
 
-    def loadmodel(self, model_name, vae_config=None):
+    def loadmodel(self, model_name, precision, vae_config=None):
+        import logging
         device = mm.get_torch_device()
         offload_device=mm.unet_offload_device()
+        dtype_map = {
+            "fp16": torch.float16,
+            "fp8_e4m3fn": torch.float8_e4m3fn,
+            "fp8_e5m2": torch.float8_e5m2,
+            "bf16": torch.bfloat16,
+            "fp32": torch.float32
+        }
+        target_dtype = dtype_map.get(precision, torch.float16)
+        safe_load_dtype = torch.float16
+
+        if hasattr(target_dtype, 'itemsize') and hasattr(safe_load_dtype, 'itemsize'):
+            if target_dtype.itemsize > safe_load_dtype.itemsize:
+                logging.warning(f"[Hunyuan3D VAE Optimizer] Blocked useless upcast from {safe_load_dtype} to {target_dtype}. Falling back to native {safe_load_dtype}.")
+                target_dtype = safe_load_dtype
 
         model_path = folder_paths.get_full_path("vae", model_name)
 
@@ -648,7 +695,7 @@ class Hy3D21VAELoader:
 
         vae = ShapeVAE(**vae_config)
         vae.load_state_dict(vae_sd)
-        vae.eval().to(torch.float16)
+        vae.eval().to(target_dtype)
         
         return (vae,)   
         
@@ -735,9 +782,10 @@ class Hy3D21VAEDecode:
 
         mm.soft_empty_cache()
         torch.cuda.empty_cache()
+        incoming_dtype = latents.dtype
 
-        vae.to(device)
-        
+        vae.to(device, dtype=incoming_dtype)
+        latents = latents.to(device=device, dtype=incoming_dtype) 
         vae.enable_flashvdm_decoder(enabled=enable_flash_vdm, mc_algo=mc_algo)
         
         latents = vae.decode(latents)
