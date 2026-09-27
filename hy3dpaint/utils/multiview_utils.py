@@ -45,7 +45,8 @@ class multiviewDiffusionNet:
         pipeline = HunyuanPaintPipeline.from_pretrained(
             model_path,
             torch_dtype=torch.float16,
-            use_fast=False
+            use_fast=False,
+            trust_remote_code=True,
         )
 
         pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(pipeline.scheduler.config, timestep_spacing="trailing")
@@ -54,8 +55,8 @@ class multiviewDiffusionNet:
         setattr(pipeline, "view_size", cfg.model.params.get("view_size", 320))
         pipeline.enable_model_cpu_offload()
         self.pipeline = pipeline.to(self.device)
-        self.pipeline.enable_vae_slicing()
-        self.pipeline.enable_vae_tiling()
+        self.pipeline.vae.enable_slicing()
+        self.pipeline.vae.enable_tiling()
 
         if hasattr(self.pipeline.unet, "use_dino") and self.pipeline.unet.use_dino:
             from ..hunyuanpaintpbr.unet.modules import Dino_v2
