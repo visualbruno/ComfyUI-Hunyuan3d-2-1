@@ -53,7 +53,7 @@ Two critical C++ extensions need to be installed: the **custom rasterizer** and 
 
 #### Custom Rasterizer
 
-You will find precompiled wheels in `hy3dpain\custom_rasterizer\dist` folder
+You will find precompiled wheels in `hy3dpaint\custom_rasterizer\dist` folder
 
 For standard Python:
 
@@ -78,13 +78,13 @@ For standard Python:
 Example, if you are on Python 3.12:
 
 ```bash
-pip install mesh_inpaint_processor-0.0.0-cp312-cp312-win_amd64.whl.whl
+pip install mesh_inpaint_processor-0.0.0-cp312-cp312-win_amd64.whl
 ```
 
 For ComfyUI Portable:
 
 ```bash
-python_embeded\python.exe -m pip install ComfyUI\custom_nodes\ComfyUI-Hunyuan3d-2-1\hy3dpaint\DifferentiableRenderer\dist\mesh_inpaint_processor-0.0.0-cp312-cp312-win_amd64.whl.whl
+python_embeded\python.exe -m pip install ComfyUI\custom_nodes\ComfyUI-Hunyuan3d-2-1\hy3dpaint\DifferentiableRenderer\dist\mesh_inpaint_processor-0.0.0-cp312-cp312-win_amd64.whl
 ```
 
 ---
