@@ -1,0 +1,37 @@
+[project]
+name = "hunyuan3d-2-1"
+description = "ComfyUI Wrapper for [a/Hunyuan3D v2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1) - From Images to High-Fidelity 3D Assets with Production-Ready PBR Material"
+version = "1.0.0"
+license = {file = "LICENSE"} 
+# classifiers = [
+#     # For OS-independent nodes (works on all operating systems)
+#     "Operating System :: OS Independent",
+#
+#     # OR for OS-specific nodes, specify the supported systems:
+#     "Operating System :: Microsoft :: Windows",  # Windows specific
+#     "Operating System :: POSIX :: Linux",  # Linux specific
+#     "Operating System :: MacOS",  # macOS specific
+#
+#     # GPU Accelerator support. Pick the ones that are supported by your extension.
+#     "Environment :: GPU :: NVIDIA CUDA",    # NVIDIA CUDA support
+#     "Environment :: GPU :: AMD ROCm",       # AMD ROCm support
+#     "Environment :: GPU :: Intel Arc",      # Intel Arc support
+#     "Environment :: NPU :: Huawei Ascend",  # Huawei Ascend support
+#     "Environment :: GPU :: Apple Metal",    # Apple Metal support
+# ]
+
+dependencies = ["trimesh", "pymeshlab", "pygltflib", "xatlas", "open3d", "omegaconf", "pyyaml", "configargparse", "transformers", "diffusers", "accelerate", "pytorch-lightning", "opencv-python", "huggingface-hub", "safetensors", "scikit-image", "pybind11", "timm", "meshlib"]
+
+[project.urls]
+Repository = "https://github.com/visualbruno/ComfyUI-Hunyuan3d-2-1"
+#  Used by Comfy Registry https://registry.comfy.org
+Documentation = "https://github.com/visualbruno/ComfyUI-Hunyuan3d-2-1/wiki"
+"Bug Tracker" = "https://github.com/visualbruno/ComfyUI-Hunyuan3d-2-1/issues"
+
+[tool.comfy]
+PublisherId = ""
+DisplayName = "ComfyUI-Hunyuan3d-2-1"
+Icon = ""
+includes = [] 
+# "requires-comfyui" = ">=1.0.0"  # ComfyUI version compatibility
+
