@@ -94,8 +94,8 @@ void rasterizeImagecoordsKernelCPU(float* V, int* F, float* d, INT64* zbuffer, f
 std::vector<torch::Tensor> rasterize_image_cpu(torch::Tensor V, torch::Tensor F, torch::Tensor D,
     int width, int height, float occlusion_truncation, int use_depth_prior)
 {
-    int num_faces = F.size(0);
-    int num_vertices = V.size(0);
+    int num_faces = static_cast<int>(F.sizes()[0]);
+    int num_vertices = static_cast<int>(V.sizes()[0]);
     auto options = torch::TensorOptions().dtype(torch::kInt32).requires_grad(false);
     auto INT64_options = torch::TensorOptions().dtype(torch::kInt64).requires_grad(false);
     auto findices = torch::zeros({height, width}, options);
@@ -118,6 +118,37 @@ std::vector<torch::Tensor> rasterize_image_cpu(torch::Tensor V, torch::Tensor F,
     for (int i = 0; i < width * height; ++i)
         barycentricFromImgcoordCPU(V.data_ptr<float>(), F.data_ptr<int>(),
             findices.data_ptr<int>(), (INT64*)z_min.data_ptr<int64_t>(), width, height, num_vertices, num_faces, barycentric.data_ptr<float>(), i);
+
+    return {findices, barycentric};
+}
+
+std::vector<torch::Tensor> rasterize_image_gpu(torch::Tensor V, torch::Tensor F, torch::Tensor D,
+    int width, int height, float occlusion_truncation, int use_depth_prior)
+{
+    int num_faces = static_cast<int>(F.sizes()[0]);
+    int num_vertices = static_cast<int>(V.sizes()[0]);
+    auto options = torch::TensorOptions().dtype(torch::kInt32).device(V.device()).requires_grad(false);
+    auto INT64_options = torch::TensorOptions().dtype(torch::kInt64).device(V.device()).requires_grad(false);
+    auto findices = torch::zeros({height, width}, options);
+    INT64 maxint = (INT64)MAXINT * (INT64)MAXINT + (MAXINT - 1);
+    auto z_min = torch::ones({height, width}, INT64_options) * (int64_t)maxint;
+    auto float_options = torch::TensorOptions().dtype(torch::kFloat32).device(V.device()).requires_grad(false);
+    auto barycentric = torch::zeros({height, width, 3}, float_options);
+
+    launch_rasterize_gpu(
+        V.data_ptr<float>(),
+        F.data_ptr<int>(),
+        use_depth_prior ? D.data_ptr<float>() : nullptr,
+        findices.data_ptr<int>(),
+        barycentric.data_ptr<float>(),
+        (INT64*)z_min.data_ptr<int64_t>(),
+        width,
+        height,
+        num_vertices,
+        num_faces,
+        occlusion_truncation,
+        use_depth_prior,
+        nullptr);
 
     return {findices, barycentric};
 }

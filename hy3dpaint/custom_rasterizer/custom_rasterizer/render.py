@@ -12,8 +12,29 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
-import custom_rasterizer_kernel
+import os
+import sys
 import torch
+
+# On Windows with ROCm, ensure ROCm runtime DLLs are discoverable
+if sys.platform == "win32" and getattr(torch.version, "hip", None) is not None:
+    try:
+        import rocm_sdk
+        rocm_bin = os.path.normpath(os.path.join(os.path.dirname(rocm_sdk.__file__), "..", "_rocm_sdk_core", "bin"))
+        if os.path.exists(rocm_bin):
+            os.add_dll_directory(rocm_bin)
+    except Exception:
+        pass
+    rocm_path = os.environ.get("ROCM_PATH") or os.environ.get("ROCM_HOME")
+    if rocm_path:
+        rocm_bin = os.path.join(rocm_path, "bin")
+        if os.path.exists(rocm_bin):
+            try:
+                os.add_dll_directory(rocm_bin)
+            except Exception:
+                pass
+
+import custom_rasterizer_kernel
 
 
 def rasterize(pos, tri, resolution, clamp_depth=torch.zeros(0), use_depth_prior=0):
